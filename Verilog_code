@@ -1,0 +1,123 @@
+module functional_timer(
+    input clk,              // Clock input
+    input rst,              // Reset input
+    input select,           // Control signal: 0 for Pomodoro, 1 for Travel
+    input [15:0] alarm_time, // Alarm time input (HHMM format)
+    output reg work,        // Output for Pomodoro work phase
+    output reg break,       // Output for Pomodoro break phase
+    output reg travel,      // Output for Travel timer
+    output reg alarm,       // Alarm signal
+    output reg [15:0] current_time // Current time in HHMM format
+);
+
+    // Parameters for the countdown times
+    parameter WORK_TIME = 5;  // Scaled-down Pomodoro work time
+    parameter BREAK_TIME = 2;  // Scaled-down Pomodoro break time
+    parameter TRAVEL_TIME = 3; // Scaled-down Travel time
+
+    // Internal registers for Pomodoro and Travel Timer
+    reg [7:0] counter = 0;      // Counter for timing (8 bits for scaled values)
+    reg work_mode = 1;          // State for Pomodoro: 1 = work, 0 = break
+    reg travel_active = 0;      // State for Travel: 1 = active, 0 = finished
+
+    // Timekeeping registers
+    reg [5:0] seconds = 0;      // Seconds (0-59)
+    reg [5:0] minutes = 0;      // Minutes (0-59)
+    reg [4:0] hours = 0;        // Hours (0-23)
+
+    // Timekeeping logic (increments time every second)
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            // Reset time
+            seconds <= 0;
+            minutes <= 0;
+            hours <= 0;
+            current_time <= 0;
+        end else begin
+            // Increment seconds
+            if (seconds < 59) begin
+                seconds <= seconds + 1;
+            end else begin
+                seconds <= 0;
+                // Increment minutes
+                if (minutes < 59) begin
+                    minutes <= minutes + 1;
+                end else begin
+                    minutes <= 0;
+                    // Increment hours
+                    if (hours < 23) begin
+                        hours <= hours + 1;
+                    end else begin
+                        hours <= 0; // Wrap around to 0 after 23
+                    end
+                end
+            end
+            // Update current time in HHMM format
+            current_time <= {hours, minutes};
+        end
+    end
+
+    // Alarm functionality
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            alarm <= 0;
+        end else begin
+            // Check if current time matches alarm time
+            if (current_time == alarm_time) begin
+                alarm <= 1; // Alarm active
+            end else begin
+                alarm <= 0; // Alarm inactive
+            end
+        end
+    end
+
+    // Pomodoro and Travel Timer functionality
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            // Reset Pomodoro and Travel Timer
+            counter <= 0;
+            work_mode <= 1;
+            travel_active <= 0;
+            work <= 0;
+            break <= 0;
+            travel <= 0;
+        end else begin
+            if (select == 0) begin
+                // Pomodoro Timer Functionality
+                travel <= 0;  // Ensure Travel timer output is off
+                if (work_mode) begin
+                    // Work phase
+                    if (counter < WORK_TIME) begin
+                        counter <= counter + 1;
+                        work <= 1; // Work mode active
+                        break <= 0;
+                    end else begin
+                        counter <= 0;
+                        work_mode <= 0; // Switch to break phase
+                    end
+                end else begin
+                    // Break phase
+                    if (counter < BREAK_TIME) begin
+                        counter <= counter + 1;
+                        work <= 0;
+                        break <= 1; // Break mode active
+                    end else begin
+                        counter <= 0;
+                        work_mode <= 1; // Switch back to work phase
+                    end
+                end
+            end else if (select == 1) begin
+                // Travel Timer Functionality
+                work <= 0;
+                break <= 0; // Ensure Pomodoro outputs are off
+                if (counter < TRAVEL_TIME) begin
+                    counter <= counter + 1;
+                    travel <= 1; // Travel timer active
+                end else begin
+                    counter <= 0;
+                    travel <= 0; // Travel timer finished
+                end
+            end
+        end
+    end
+endmodule
